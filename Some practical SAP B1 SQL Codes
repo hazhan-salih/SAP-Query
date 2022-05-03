@@ -1,0 +1,57 @@
+--Retrieve Stock from a specific Warehouse where you reduce the number of restqty from the open orders one month ahead
+
+SELECT 
+  T0.[ItemCode], 
+  T0.[OnHand], 
+  SUM(T1.[OpenQty]) as Reserviert 
+FROM OITW T0 Left JOIN (
+  SELECT
+  T0.[ItemCode],
+  T0.[OpenQty],
+  T0.[WhsCode]
+  FROM RDR1 T0 INNER JOIN ORDR T1 ON T0.[DocEntry] = T1.[DocEntry]
+ WHERE 
+  T1.[DocDueDate]< DATEADD(day,31,GETDATE())
+  AND T0.[WhsCode]='12' 
+  AND T0.[OpenQty] <> '0'
+GROUP BY 
+  T0.[WhsCode],
+  T0.[ItemCode],T0.[OpenQty]) as T1 on T1.ItemCode = T0.ItemCode WHERE T0.[WhsCode] ='12' 
+ GROUP BY  
+  T0.[ItemCode], T0.[OnHand]
+
+--Order overview for the Month grouped by Date
+SELECT 
+  T1.[ItemCode],
+  T1.[Dscription],
+  SUBSTRING(CAST(CAST(T0.DocDueDate AS date) AS CHAR), 1,7) AS "Lieferdatum",
+  T1.[Currency],
+  CASE WHEN T1.Currency <> 'EUR' 
+    THEN SUM(T1.TotalFrgn) 
+    ELSE SUM(T1.LineTotal) END AS "Betrag",
+  SUM(T1.[Quantity]) AS "Menge",
+  SUM(T1.[OpenQty]) AS "Offene Menge"
+FROM ORDR T0  
+INNER JOIN RDR1 T1 ON T0.[DocEntry] = T1.[DocEntry] 
+WHERE 
+  T0.[DocStatus] = 'O' 
+  AND T0.[CANCELED] = 'N'
+  AND T0.[DocDueDate] >= [%0] 
+  AND T0.[DocDueDate] <= [%1] 
+GROUP BY 
+  T1.[ItemCode], T1.[Dscription], T1.[Currency], SUBSTRING(CAST(CAST(T0.DocDueDate AS date) AS CHAR), 1,7) 
+  ORDER BY 3 ASC
+
+--Sales BOM – QTY Package of Father Item (UDV)
+SELECT 
+  min(floor(T1.[OnHand]/T0.[Quantity]))
+FROM
+  ITT1 T0 INNER JOIN OITM T1 ON T0.Code = T1.ItemCode
+ WHERE
+  T0.[Father] =$[OITM.Itemcode]
+
+--Linking a PK to an FK to receive the Datev account depending on the BP group (UDV)
+SELECT CASE
+WHEN $[OCRD.Series] = 76 THEN T0.[Name]
+WHEN $[OCRD.Series] <> 76 THEN $[OCRD.CardCode]
+ELSE ''
